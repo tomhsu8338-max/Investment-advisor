@@ -281,10 +281,11 @@ async function submitBullet() {
 
 // ── AI Analysis ──
 async function runAnalysis() {
-  alert('按鈕有反應！開始執行...');
   const missing = Object.keys(PORTFOLIO).filter(id => !priceData[id]?.price);
-  if (missing.length > 0) { alert('尚缺股價：' + missing.map(id=>PORTFOLIO[id].name).join('、') + '\n請先到「持倉」頁等資料載入'); return; }
-  console.log('Starting analysis, bullet:', bulletData.balance);
+  if (missing.length > 0) {
+    alert('尚缺股價：' + missing.map(id=>PORTFOLIO[id].name).join('、') + '\n請先到「持倉」頁等資料載入\n\n提示：切換到持倉頁後等資料載入完成，再回來分析');
+    return;
+  }
 
   const btn = document.getElementById('analyzeBtn');
   btn.disabled = true; btn.textContent = '🤖 分析中...';
