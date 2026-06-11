@@ -80,7 +80,7 @@ const PORTFOLIO = {
   voo:      { name:'VOO',    fullName:'標普500 Vanguard',    shares:12,    avgPrice:677.17, ticker:'VOO',       currency:'USD', role:'核心穩定資產', priority:1, autoFetch:true },
   qqqm:     { name:'QQQM',   fullName:'納斯達克100 Invesco', shares:13,    avgPrice:287.51, ticker:'QQQM',      currency:'USD', role:'成長型資產',   priority:2, autoFetch:true },
   leverage: { name:'00631L', fullName:'元大台灣50正2',        shares:5316,  avgPrice:33.43,  ticker:'00631L.TW', currency:'TWD', role:'報酬放大器',   priority:4, autoFetch:true },
-  allianz:  { name:'安聯科技',fullName:'安聯台灣科技基金',   units:638.3,  avgPrice:751.12, ticker:'F0HKG05X22:FO', currency:'TWD', role:'核心成長底倉', priority:3, autoFetch:true, allianzFetch:false },
+  allianz:  { name:'安聯科技',fullName:'安聯台灣科技基金',   units:638.3,  avgPrice:751.12, ticker:null,        currency:'TWD', role:'核心成長底倉', priority:3, autoFetch:true },
 };
 
 const priceData = {};
@@ -135,19 +135,36 @@ async function fetchTicker(id) {
   priceData[id] = { ...priceData[id], loading: true };
   renderCards();
   try {
-    const res = await fetch(`${workerUrl()}?symbol=${encodeURIComponent(p.ticker)}&interval=1d&range=1y`);
-    const json = await res.json();
-    const chart = json?.chart?.result?.[0];
-    if (!chart) throw new Error('no chart data');
-    const closes = chart.indicators.quote[0].close.filter(Boolean);
-    priceData[id] = {
-      price: closes[closes.length-1],
-      ma20:  calcMA(closes, 20),
-      ma60:  calcMA(closes, 60),
-      ma120: calcMA(closes, 120),
-      ma250: calcMA(closes, 250),
-      fetchedAt: Date.now(), loading: false
-    };
+    if (id === 'allianz') {
+      const res = await fetch(`${workerUrl()}?allianz=1`);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      const items = json.items || [];
+      if (items.length === 0) throw new Error('no nav data');
+      let closes = items.map(it => Array.isArray(it) ? it[1] : (it.nav || it[1])).filter(Boolean);
+      priceData[id] = {
+        price: closes[closes.length - 1],
+        ma20:  calcMA(closes, 20),
+        ma60:  calcMA(closes, 60),
+        ma120: calcMA(closes, 120),
+        ma250: calcMA(closes, 250),
+        fetchedAt: Date.now(), loading: false
+      };
+    } else {
+      const res = await fetch(`${workerUrl()}?symbol=${encodeURIComponent(p.ticker)}&interval=1d&range=1y`);
+      const json = await res.json();
+      const chart = json?.chart?.result?.[0];
+      if (!chart) throw new Error('no chart data');
+      const closes = chart.indicators.quote[0].close.filter(Boolean);
+      priceData[id] = {
+        price: closes[closes.length-1],
+        ma20:  calcMA(closes, 20),
+        ma60:  calcMA(closes, 60),
+        ma120: calcMA(closes, 120),
+        ma250: calcMA(closes, 250),
+        fetchedAt: Date.now(), loading: false
+      };
+    }
     document.getElementById('fetchErrors').innerHTML = '';
   } catch(e) {
     priceData[id] = { ...priceData[id], loading: false };
@@ -218,7 +235,7 @@ async function analyze() {
   const userMsg = `今日數據：\n${lines}\n\n剩餘子彈：${bullet}萬\n昨天加倉：${document.getElementById('prevAdded').value||'無'}\n備註：${document.getElementById('marketNote').value||'無'}`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch(`${workerUrl()}/ai`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1200, system:SYSTEM_PROMPT, messages:[{role:'user',content:userMsg}] })
     });
