@@ -281,6 +281,7 @@ async function submitBullet() {
 
 // ── AI Analysis ──
 async function runAnalysis() {
+  alert('按鈕有反應！開始執行...');
   const missing = Object.keys(PORTFOLIO).filter(id => !priceData[id]?.price);
   if (missing.length > 0) { alert('尚缺股價：' + missing.map(id=>PORTFOLIO[id].name).join('、') + '\n請先到「持倉」頁等資料載入'); return; }
   console.log('Starting analysis, bullet:', bulletData.balance);
