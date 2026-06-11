@@ -282,64 +282,61 @@ async function submitBullet() {
 // ── AI Analysis ──
 async function runAnalysis() {
   const keys = Object.keys(PORTFOLIO);
-  const status = keys.map(id => id + ':' + (priceData[id]?.price || 'NO')).join(', ');
-  alert('股價狀態：' + status);
-  const missing = Object.keys(PORTFOLIO).filter(id => !priceData[id]?.price);
+  const missing = keys.filter(id => !priceData[id]?.price);
   if (missing.length > 0) {
-    alert('尚缺股價：' + missing.map(id=>PORTFOLIO[id].name).join('、') + '\n請先到「持倉」頁等資料載入\n\n提示：切換到持倉頁後等資料載入完成，再回來分析');
+    alert('尚缺股價：' + missing.map(id=>PORTFOLIO[id].name).join('、'));
     return;
   }
 
   const btn = document.getElementById('analyzeBtn');
-  btn.disabled = true; btn.textContent = '🤖 分析中...';
+  btn.disabled = true;
+  btn.textContent = '🤖 分析中...';
   document.getElementById('aiResult').innerHTML = '<div class="card" style="text-align:center;padding:24px;color:#64748b"><span class="spinner"></span> AI 分析中，請稍候...</div>';
 
-  const lines = Object.keys(PORTFOLIO).map(id => {
-    const p = PORTFOLIO[id], d = priceData[id];
-    const gain = pct(d.price, p.avgPrice);
-    const maStr = [d.ma20?`MA20=${d.ma20}`:null, d.ma60?`MA60=${d.ma60}`:null, d.ma120?`MA120=${d.ma120}`:null, d.ma250?`MA250=${d.ma250}`:null].filter(Boolean).join(' | ');
-    const pos = d.price>=(d.ma20||0)?'在MA20上方':d.price>=(d.ma60||0)?'跌破MA20':d.price>=(d.ma120||0)?'跌破MA60':d.price>=(d.ma250||0)?'跌破MA120':'跌破MA250';
-    return `${p.name}：現價$${d.price.toFixed(d.price<100?3:2)} 均價$${p.avgPrice} ${gain>=0?'+':''}${gain}% | ${maStr} | ${pos}`;
-  }).join('\n');
-
-  const bulletStr = `$${fmtMoney(bulletData.balance)}台幣`;
-  const prompt = `${SYSTEM_PROMPT}\n\n【今日市場數據】\n${lines}\n\n剩餘子彈：${bulletStr}\n昨天加倉：${document.getElementById('prevAdded').value||'無'}\n備註：${document.getElementById('marketNote').value||'無'}\n\n請依以上規則輸出今日加倉決策分析。`;
-
   try {
-    const res = await fetch(`${workerUrl()}/ai`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
+    const lines = keys.map(id => {
+      const p = PORTFOLIO[id], d = priceData[id];
+      const gain = pct(d.price, p.avgPrice);
+      const maStr = [d.ma20?'MA20='+d.ma20:null, d.ma60?'MA60='+d.ma60:null, d.ma120?'MA120='+d.ma120:null, d.ma250?'MA250='+d.ma250:null].filter(Boolean).join(' | ');
+      const pos = d.price>=(d.ma20||0)?'在MA20上方':d.price>=(d.ma60||0)?'跌破MA20':d.price>=(d.ma120||0)?'跌破MA60':d.price>=(d.ma250||0)?'跌破MA120':'跌破MA250';
+      return p.name+'：現價$'+d.price.toFixed(d.price<100?3:2)+' 均價$'+p.avgPrice+' '+(gain>=0?'+':'')+gain+'% | '+maStr+' | '+pos;
+    }).join('\n');
+
+    const bulletStr = '$' + fmtMoney(bulletData.balance) + '台幣';
+    const prompt = SYSTEM_PROMPT + '\n\n【今日市場數據】\n' + lines + '\n\n剩餘子彈：' + bulletStr + '\n昨天加倉：' + (document.getElementById('prevAdded').value||'無') + '\n備註：' + (document.getElementById('marketNote').value||'無') + '\n\n請依以上規則輸出今日加倉決策分析。';
+
+    const wUrl = document.getElementById('workerUrl').value.trim();
+    const res = await fetch(wUrl + '/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: prompt })
     });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    const text = data.text || '';
 
-    // Parse signal
-    const signalMatch = text.match(/【(積極加倉|正常加倉|小量加倉|不加倉|停止加倉)】/);
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch(e) {
+      throw new Error('Worker回傳無法解析: ' + text.slice(0, 200));
+    }
+    if (data.error) throw new Error('Gemini錯誤: ' + data.error);
+
+    const aiText = data.text || '';
+    if (!aiText) throw new Error('Gemini沒有回傳內容');
+
+    const signalMatch = aiText.match(/【(積極加倉|正常加倉|小量加倉|不加倉|停止加倉)】/);
     const signal = signalMatch ? signalMatch[1] : '';
-    const sigStyle = {
-      '積極加倉': ['#16a34a','#fff','💪'],
-      '正常加倉': ['#2563eb','#fff','✅'],
-      '小量加倉': ['#b45309','#fff','🔸'],
-      '不加倉':   ['#374151','#9ca3af','⏸'],
-      '停止加倉': ['#7f1d1d','#fca5a5','🛑'],
-    }[signal] || ['#374151','#9ca3af','—'];
+    const sigStyle = {'積極加倉':['#16a34a','#fff','💪'],'正常加倉':['#2563eb','#fff','✅'],'小量加倉':['#b45309','#fff','🔸'],'不加倉':['#374151','#9ca3af','⏸'],'停止加倉':['#7f1d1d','#fca5a5','🛑']}[signal] || ['#374151','#9ca3af','—'];
 
-    document.getElementById('aiResult').innerHTML = `
-      ${signal ? `<div style="background:${sigStyle[0]};border-radius:16px;padding:18px 20px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
-        <div style="font-size:28px">${sigStyle[2]}</div>
-        <div><div style="font-size:20px;font-weight:800;color:${sigStyle[1]}">${signal}</div><div style="font-size:11px;color:${sigStyle[1]};opacity:0.7;margin-top:2px">今日整體信號</div></div>
-      </div>` : ''}
-      <div class="card">
-        <div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:10px">完整分析</div>
-        <div style="font-size:13px;color:#cbd5e1;line-height:1.8;white-space:pre-wrap">${text}</div>
-      </div>
-      <div style="text-align:center;font-size:11px;color:#334155;padding:12px 0">以上為AI判斷，最終決策由你負責 · 紀律優先於情緒</div>`;
+    document.getElementById('aiResult').innerHTML =
+      (signal ? '<div style="background:'+sigStyle[0]+';border-radius:16px;padding:18px 20px;margin-bottom:12px;display:flex;align-items:center;gap:12px"><div style="font-size:28px">'+sigStyle[2]+'</div><div><div style="font-size:20px;font-weight:800;color:'+sigStyle[1]+'">'+signal+'</div><div style="font-size:11px;color:'+sigStyle[1]+';opacity:0.7;margin-top:2px">今日整體信號</div></div></div>' : '') +
+      '<div class="card"><div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:10px">完整分析</div><div style="font-size:13px;color:#cbd5e1;line-height:1.8;white-space:pre-wrap">' + aiText + '</div></div>' +
+      '<div style="text-align:center;font-size:11px;color:#334155;padding:12px 0">以上為AI判斷，最終決策由你負責 · 紀律優先於情緒</div>';
+
   } catch(e) {
-    console.error('Analysis error:', e);
-    document.getElementById('aiResult').innerHTML = `<div class="error-box" style="font-size:13px">分析失敗：${e.message}<br><br>請確認：<br>1. Worker 已更新到最新版<br>2. GEMINI_API_KEY 已設定</div>`;
+    document.getElementById('aiResult').innerHTML = '<div class="error-box" style="font-size:13px">分析失敗：' + e.message + '</div>';
   }
-  btn.disabled = false; btn.textContent = '🤖 生成今日加倉決策';
+
+  btn.disabled = false;
+  btn.textContent = '🤖 生成今日加倉決策';
 }
 
 // Init
