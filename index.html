@@ -283,10 +283,11 @@ async function submitBullet() {
 async function runAnalysis() {
   const missing = Object.keys(PORTFOLIO).filter(id => !priceData[id]?.price);
   if (missing.length > 0) { alert('尚缺股價：' + missing.map(id=>PORTFOLIO[id].name).join('、') + '\n請先到「持倉」頁等資料載入'); return; }
+  console.log('Starting analysis, bullet:', bulletData.balance);
 
   const btn = document.getElementById('analyzeBtn');
   btn.disabled = true; btn.textContent = '🤖 分析中...';
-  document.getElementById('aiResult').innerHTML = '';
+  document.getElementById('aiResult').innerHTML = '<div class="card" style="text-align:center;padding:24px;color:#64748b"><span class="spinner"></span> AI 分析中，請稍候...</div>';
 
   const lines = Object.keys(PORTFOLIO).map(id => {
     const p = PORTFOLIO[id], d = priceData[id];
@@ -330,7 +331,8 @@ async function runAnalysis() {
       </div>
       <div style="text-align:center;font-size:11px;color:#334155;padding:12px 0">以上為AI判斷，最終決策由你負責 · 紀律優先於情緒</div>`;
   } catch(e) {
-    document.getElementById('aiResult').innerHTML = `<div class="error-box">分析失敗：${e.message}</div>`;
+    console.error('Analysis error:', e);
+    document.getElementById('aiResult').innerHTML = `<div class="error-box" style="font-size:13px">分析失敗：${e.message}<br><br>請確認：<br>1. Worker 已更新到最新版<br>2. GEMINI_API_KEY 已設定</div>`;
   }
   btn.disabled = false; btn.textContent = '🤖 生成今日加倉決策';
 }
