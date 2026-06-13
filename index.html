@@ -117,42 +117,104 @@ const PORTFOLIO = {
   leverage: { name:'00631L', fullName:'元大台灣50正2',        shares:5316,  avgPrice:33.43,  ticker:'00631L.TW', currency:'TWD', role:'報酬放大器',   priority:4 },
 };
 
-const SYSTEM_PROMPT = `你是一個純規則執行系統，不做主觀判斷，只依照以下規則輸出決策。
+const SYSTEM_PROMPT = `You are a professional portfolio manager optimized for a 28-year-old investor with HIGH risk tolerance and long investment horizon.
 
-【重要：決策必須100%依規則，不得用「市場氣氛」「謹慎觀察」等理由覆蓋規則】
+Your objective:
+- Maximize long-term capital growth
+- Accept short-term volatility
+- Maintain controlled aggressiveness
+- Avoid catastrophic errors (not avoid drawdowns)
 
-【持倉優先順序（固定不變）】
-1. VOO（標普500）- 最優先
-2. QQQM（納斯達克100）- 次優先
-3. 安聯台灣科技基金 - 條件嚴格
-4. 00631L（台股正二2倍槓桿）- 最後才考慮
+[Core Philosophy]
+- Drawdowns are opportunities, not threats
+- Capital deployment should be proactive, not overly defensive
+- Missing opportunities is worse than temporary drawdowns
+- However: NEVER lose the ability to continue deploying capital
 
-【技術面加倉規則（強制執行）】
-價格 < MA20 且 > MA60 → 小量加倉（2~3萬）
-價格 < MA60 且 > MA120 → 正常加倉（3~5萬）
-價格 < MA120 且 > MA250 → 積極加倉（4~5萬）
-價格 < MA250 → 停止加倉
-價格 > MA20 → 不加倉
+[Portfolio Structure]
+Assets:
+- VOO -> core base (stability anchor)
+- QQQM -> primary growth engine
+- Allianz Taiwan Technology Fund -> high-beta concentrated exposure
+- 00631L -> leveraged tactical accelerator
 
-只要符合上述條件，必須建議加倉，不得以「氣氛謹慎」為由否決。
+[Capital Deployment Logic]
+- You are allowed to be AGGRESSIVE within limits
+- Capital is continuously replenished via income (not finite)
 
-【子彈規則】
-- 單次總金額 ≤ 剩餘子彈 × 30%
-- 每筆 2~5萬台幣
-- 昨天已加的標的今天不加
-- 不一次補滿某一檔
+Rules:
+- Per trade: up to 35% of available cash allowed (more aggressive than standard)
+- Must always leave at least 30% of cash unused
+- Scaling IN is preferred over waiting
 
-【安聯專屬規則】只在以下全部成立才加：台股跌幅 ≥ -8% + 恐慌賣壓 + 有子彈 + 不適合再加QQQM。每次2~3萬。
+[Price Structure analysis - based on MA positions]
+- Price below MA20 but above MA60 -> small scale-in
+- Price below MA60 but above MA120 -> normal scale-in
+- Price below MA120 but above MA250 -> aggressive scale-in
+- Price below MA250 -> reduce position size, but still participate
+- Lower lows -> allowed to buy (NOT forbidden), but reduce position size per entry
+- Sideways stabilization -> increase size
+- Reversal signals -> increase size further
 
-【00631L專屬規則】需全部成立：大盤跌 -8%~-10% + 止跌橫盤（不再創新低）+ 有子彈。否則不加。
+[Asset Allocation Priority - Modified for Aggression]
+1. VOO -> default accumulation base
+2. QQQM -> aggressively accumulate in drawdowns
+3. Allianz -> used when tech selling accelerates
+4. 00631L -> used earlier than conservative system
 
-【輸出格式（繁體中文，嚴格照此格式）】
-1. 整體信號：【積極加倉/正常加倉/小量加倉/不加倉/停止加倉】
-2. 局勢摘要：2句，說明各標的MA位置
-3. 各標的判斷：每個標的一行，格式「- VOO：加倉/不加倉，原因（MA位置）」
-4. 安聯：可加倉 or 不建議（原因）
-5. 00631L：條件成立 or 條件未達（原因）
-6. 建議總金額：X萬，執行後剩餘子彈：Y萬`;
+[Growth Bias Rule - IMPORTANT SHIFT]
+Unlike conservative systems:
+- You ARE allowed to:
+  - Add QQQM even before VOO is fully deployed
+  - Increase exposure to growth during drawdowns
+  - Accept concentration temporarily
+- BUT: Avoid adding BOTH QQQM and Allianz heavily at the same time
+
+[Leveraged ETF Rule - More Flexible Version]
+00631L can be used when:
+- Drawdown >= -6% (earlier than before)
+AND
+- Position size is SMALL
+AND
+- Not used in consecutive decisions
+Position sizing rule: Max 10-15% of total portfolio exposure for 00631L
+
+[Forward Risk Handling]
+If uncertainty is HIGH:
+- DO NOT stop buying
+- ONLY reduce position size
+
+[Momentum vs Mean Reversion Balance]
+- Buy gradually during decline
+- Increase size as price stabilizes
+- Do not wait for confirmation -> scale in earlier
+
+[Behavioral Rules]
+- NEVER recommend waiting indefinitely
+- ALWAYS allow some level of participation
+- Prefer imperfect entry over no entry
+- Avoid all-in behavior
+- Maintain continuous exposure growth
+
+[Key Principle]
+"For a young investor, imperfect timing with continuous participation beats perfect timing with hesitation."
+
+[Output Format - 請用繁體中文撰寫reasoning與計畫內容，但action/asset/aggressiveness欄位請用英文]
+請只輸出以下JSON結構，不要加markdown或其他文字：
+{
+  "action": "BUY / HOLD / WAIT",
+  "asset": "VOO / QQQM / Allianz / 00631L / NONE",
+  "amount_ntd": number (單位:台幣元),
+  "aggressiveness": "LOW / MEDIUM / HIGH",
+  "reasoning": [
+    "drawdown level 說明",
+    "structure assessment 說明",
+    "opportunity signal 說明",
+    "risk balance 說明"
+  ],
+  "next_plan": "市場若繼續下跌時的應對計畫",
+  "cash_strategy": "建議保留多少現金及原因"
+}`;
 
 const priceData = {};
 let bulletData = { balance: 200000, records: [] };
@@ -309,7 +371,7 @@ async function runAnalysis() {
 
     const bulletWan = (bulletData.balance / 10000).toFixed(1);
     const bulletStr = bulletWan + '萬台幣';
-    const prompt = SYSTEM_PROMPT + '\n\n【今日市場數據】\n' + lines + '\n\n剩餘子彈：' + bulletStr + '\n昨天加倉：' + (document.getElementById('prevAdded').value||'無') + '\n備註：' + (document.getElementById('marketNote').value||'無') + '\n\n請依以上規則輸出今日加倉決策分析。';
+    const prompt = SYSTEM_PROMPT + '\n\n【今日市場數據】\n' + lines + '\n\n可用現金：' + bulletData.balance + ' 台幣（約' + bulletWan + '）\n（單筆上限為可用現金的35%，且需保留至少30%現金不用）\n昨天加倉：' + (document.getElementById('prevAdded').value||'無') + '\n市場備註：' + (document.getElementById('marketNote').value||'無') + '\n\n請依system prompt規則，輸出今日的資金部署決策（JSON格式）。';
 
     const wUrl = document.getElementById('workerUrl').value.trim();
     const res = await fetch(wUrl + '/ai', {
@@ -325,21 +387,61 @@ async function runAnalysis() {
     }
     if (data.error) throw new Error('Gemini錯誤: ' + data.error);
 
-    const aiText = data.text || '';
-    if (!aiText) throw new Error('Gemini沒有回傳內容');
+const aiText = data.text || '';
+    if (!aiText) throw new Error('AI沒有回傳內容');
 
-    const signalMatch = aiText.match(/【(積極加倉|正常加倉|小量加倉|不加倉|停止加倉)】/);
-    const signal = signalMatch ? signalMatch[1] : '';
-    const sigStyle = {'積極加倉':['#16a34a','#fff','💪'],'正常加倉':['#2563eb','#fff','✅'],'小量加倉':['#b45309','#fff','🔸'],'不加倉':['#374151','#9ca3af','⏸'],'停止加倉':['#7f1d1d','#fca5a5','🛑']}[signal] || ['#374151','#9ca3af','—'];
+    // Parse JSON from response (strip markdown fences if present)
+    const cleanText = aiText.replace(/```json|```/g, '').trim();
+    let plan;
+    try {
+      plan = JSON.parse(cleanText);
+    } catch(e) {
+      // fallback: show raw text if not valid JSON
+      document.getElementById('aiResult').innerHTML =
+        '<div class="card"><div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:10px">完整分析（原始回應）</div><div style="font-size:13px;color:#cbd5e1;line-height:1.8;white-space:pre-wrap">' + aiText + '</div></div>';
+      btn.disabled = false; btn.textContent = '🤖 生成今日加倉決策';
+      return;
+    }
+
+    const actionStyle = {
+      'BUY':  ['#16a34a','#fff','💰'],
+      'HOLD': ['#374151','#9ca3af','⏸'],
+      'WAIT': ['#7f1d1d','#fca5a5','⏳'],
+    }[plan.action] || ['#374151','#9ca3af','—'];
+
+    const aggStyle = {
+      'LOW':    ['#374151','#9ca3af'],
+      'MEDIUM': ['#b45309','#fde68a'],
+      'HIGH':   ['#16a34a','#bbf7d0'],
+    }[plan.aggressiveness] || ['#374151','#9ca3af'];
+
+    const assetName = { 'VOO':'VOO','QQQM':'QQQM','Allianz':'安聯科技','00631L':'00631L','NONE':'—' }[plan.asset] || plan.asset;
+    const amountWan = plan.amount_ntd ? (plan.amount_ntd/10000).toFixed(1)+'萬' : '—';
+
+    const reasoningHtml = (plan.reasoning||[]).map(r =>
+      '<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="color:#475569;font-size:13px">•</span><span style="font-size:13px;color:#cbd5e1;line-height:1.6">'+r+'</span></div>'
+    ).join('');
 
     document.getElementById('aiResult').innerHTML =
-      (signal ? '<div style="background:'+sigStyle[0]+';border-radius:16px;padding:18px 20px;margin-bottom:12px;display:flex;align-items:center;gap:12px"><div style="font-size:28px">'+sigStyle[2]+'</div><div><div style="font-size:20px;font-weight:800;color:'+sigStyle[1]+'">'+signal+'</div><div style="font-size:11px;color:'+sigStyle[1]+';opacity:0.7;margin-top:2px">今日整體信號</div></div></div>' : '') +
-      '<div class="card"><div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:10px">完整分析</div><div style="font-size:13px;color:#cbd5e1;line-height:1.8;white-space:pre-wrap">' + aiText + '</div></div>' +
-      '<div style="text-align:center;font-size:11px;color:#334155;padding:12px 0">以上為AI判斷，最終決策由你負責 · 紀律優先於情緒</div>';
-
-  } catch(e) {
-    document.getElementById('aiResult').innerHTML = '<div class="error-box" style="font-size:13px">分析失敗：' + e.message + '</div>';
-  }
+      '<div style="background:'+actionStyle[0]+';border-radius:16px;padding:18px 20px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px">'
+        + '<div style="display:flex;align-items:center;gap:12px">'
+          + '<div style="font-size:28px">'+actionStyle[2]+'</div>'
+          + '<div><div style="font-size:20px;font-weight:800;color:'+actionStyle[1]+'">'+plan.action+(plan.asset && plan.asset!=='NONE' ? ' · '+assetName : '')+'</div>'
+          + '<div style="font-size:11px;color:'+actionStyle[1]+';opacity:0.7;margin-top:2px">今日建議</div></div>'
+        + '</div>'
+        + (plan.amount_ntd ? '<div style="text-align:right"><div style="font-size:22px;font-weight:800;color:'+actionStyle[1]+'">'+amountWan+'</div><div style="font-size:11px;color:'+actionStyle[1]+';opacity:0.7">建議金額</div></div>' : '')
+      + '</div>'
+      + '<div class="card" style="margin-bottom:10px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+          + '<div style="font-size:12px;color:#64748b;font-weight:600">積極程度</div>'
+          + '<span class="badge" style="background:'+aggStyle[0]+';color:'+aggStyle[1]+'">'+plan.aggressiveness+'</span>'
+        + '</div>'
+        + '<div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:8px">判斷依據</div>'
+        + reasoningHtml
+      + '</div>'
+      + (plan.next_plan ? '<div class="card" style="margin-bottom:10px"><div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:6px">📉 若市場繼續下跌</div><div style="font-size:13px;color:#cbd5e1;line-height:1.7">'+plan.next_plan+'</div></div>' : '')
+      + (plan.cash_strategy ? '<div class="card"><div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:6px">💵 現金策略</div><div style="font-size:13px;color:#cbd5e1;line-height:1.7">'+plan.cash_strategy+'</div></div>' : '')
+      + '<div style="text-align:center;font-size:11px;color:#334155;padding:12px 0">以上為AI判斷，最終決策由你負責</div>';
 
   btn.disabled = false;
   btn.textContent = '🤖 生成今日加倉決策';
