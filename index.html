@@ -199,6 +199,22 @@ If uncertainty is HIGH:
 [Key Principle]
 "For a young investor, imperfect timing with continuous participation beats perfect timing with hesitation."
 
+--------------------------------
+[2026年 6-8月 定期定額計畫 - 特別規則]
+
+用戶在2026年6-8月執行分期投入計畫（將200,000+104,040現金逐步部署）：
+- 第1期（6月）：VOO 15萬、QQQM 10萬（+額外加倉2.7萬）、00631L 5萬 → 已執行
+- 第2期（7月）：VOO 12萬、QQQM 8萬、00631L 5萬
+- 第3期（8月）：VOO 8萬、QQQM 7萬、00631L 4.5萬
+
+規則：
+- 若當前月份為6、7、8月：基礎配置已按計畫排定，預設action為HOLD（維持計畫，不重複建議相同標的）
+- 但若該月跌幅明顯（VOO/QQQM跌破MA60以上，或大盤跌幅≥-5%），仍可建議"額外加碼"（asset+amount_ntd），視為計畫外加碼，並在reasoning中說明"此為計畫外額外加碼"
+- 若無明顯下跌機會，回覆HOLD，asset設為對應本期計畫標的，amount_ntd設為0，reasoning說明"本期定期定額已排定，本月按計畫執行，暫無額外加碼必要"，next_plan提及下一期排定金額
+
+[2026年 9月起]
+- 完全恢復依照本系統之技術面與資金部署邏輯自由判斷，不再受上述定期定額排程限制
+
 [Output Format - 請用繁體中文撰寫reasoning與計畫內容，但action/asset/aggressiveness欄位請用英文]
 請只輸出以下JSON結構，不要加markdown或其他文字：
 {
@@ -371,7 +387,9 @@ async function runAnalysis() {
 
     const bulletWan = (bulletData.balance / 10000).toFixed(1);
     const bulletStr = bulletWan + '萬台幣';
-    const prompt = SYSTEM_PROMPT + '\n\n【今日市場數據】\n' + lines + '\n\n可用現金：' + bulletData.balance + ' 台幣（約' + bulletWan + '）\n（單筆上限為可用現金的35%，且需保留至少30%現金不用）\n昨天加倉：' + (document.getElementById('prevAdded').value||'無') + '\n市場備註：' + (document.getElementById('marketNote').value||'無') + '\n\n請依system prompt規則，輸出今日的資金部署決策（JSON格式）。';
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('zh-TW', {year:'numeric', month:'long', day:'numeric'});
+    const prompt = SYSTEM_PROMPT + '\n\n今天日期：' + dateStr + '\n\n【今日市場數據】\n' + lines + '\n\n可用現金：' + bulletData.balance + ' 台幣（約' + bulletWan + '）\n（單筆上限為可用現金的35%，且需保留至少30%現金不用）\n昨天加倉：' + (document.getElementById('prevAdded').value||'無') + '\n市場備註：' + (document.getElementById('marketNote').value||'無') + '\n\n請依system prompt規則（特別注意當前月份是否在6-8月定期定額計畫範圍內），輸出今日的資金部署決策（JSON格式）。';
 
     const wUrl = document.getElementById('workerUrl').value.trim();
     const res = await fetch(wUrl + '/ai', {
