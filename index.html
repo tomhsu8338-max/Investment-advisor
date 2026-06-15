@@ -47,6 +47,7 @@ textarea { resize: none; }
 <!-- ── TAB: 持倉 ── -->
 <div id="page-prices">
   <div style="font-size:11px;color:#64748b;font-weight:600;margin-bottom:8px;letter-spacing:0.5px">即時股價 · 每30秒自動更新</div>
+  <div id="vixCard"></div>
   <div id="portfolioCards"></div>
   <div id="fetchErrors"></div>
   <div class="card" style="padding:12px 14px;margin-top:4px">
@@ -101,9 +102,14 @@ textarea { resize: none; }
       <input type="text" id="prevAdded" placeholder="例：VOO 或 無">
     </div>
   </div>
-  <button class="btn btn-main" style="background:linear-gradient(90deg,#0f766e,#1d4ed8);margin-bottom:12px" onclick="runAnalysis()" id="analyzeBtn">
-    🤖 生成今日加倉決策
-  </button>
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <button class="btn btn-main" style="background:linear-gradient(90deg,#0f766e,#1d4ed8);flex:2" onclick="runAnalysis(false)" id="analyzeBtn">
+      🤖 檢查訊號 / 生成決策
+    </button>
+    <button class="btn btn-main" style="background:#334155;color:#cbd5e1;flex:1;font-size:13px" onclick="runAnalysis(true)" id="forceBtn">
+      強制分析
+    </button>
+  </div>
   <div id="aiResult"></div>
 </div>
 
@@ -117,120 +123,130 @@ const PORTFOLIO = {
   leverage: { name:'00631L', fullName:'元大台灣50正2',        shares:5316,  avgPrice:33.43,  ticker:'00631L.TW', currency:'TWD', role:'報酬放大器',   priority:4 },
 };
 
-const SYSTEM_PROMPT = `You are a professional portfolio manager optimized for a 28-year-old investor with HIGH risk tolerance and long investment horizon.
+const SYSTEM_PROMPT = `你是一個專業的投資決策引擎，同時負責通知判斷（professional investment decision engine WITH notification responsibilities）。
 
-Your objective:
-- Maximize long-term capital growth
-- Accept short-term volatility
-- Maintain controlled aggressiveness
-- Avoid catastrophic errors (not avoid drawdowns)
-
-[Core Philosophy]
-- Drawdowns are opportunities, not threats
-- Capital deployment should be proactive, not overly defensive
-- Missing opportunities is worse than temporary drawdowns
-- However: NEVER lose the ability to continue deploying capital
-
-[Portfolio Structure]
-Assets:
-- VOO -> core base (stability anchor)
-- QQQM -> primary growth engine
-- Allianz Taiwan Technology Fund -> high-beta concentrated exposure
-- 00631L -> leveraged tactical accelerator
-
-[Capital Deployment Logic]
-- You are allowed to be AGGRESSIVE within limits
-- Capital is continuously replenished via income (not finite)
-
-Rules:
-- Per trade: up to 35% of available cash allowed (more aggressive than standard)
-- Must always leave at least 30% of cash unused
-- Scaling IN is preferred over waiting
-
-[Price Structure analysis - based on MA positions]
-- Price below MA20 but above MA60 -> small scale-in
-- Price below MA60 but above MA120 -> normal scale-in
-- Price below MA120 but above MA250 -> aggressive scale-in
-- Price below MA250 -> reduce position size, but still participate
-- Lower lows -> allowed to buy (NOT forbidden), but reduce position size per entry
-- Sideways stabilization -> increase size
-- Reversal signals -> increase size further
-
-[Asset Allocation Priority - Modified for Aggression]
-1. VOO -> default accumulation base
-2. QQQM -> aggressively accumulate in drawdowns
-3. Allianz -> used when tech selling accelerates
-4. 00631L -> used earlier than conservative system
-
-[Growth Bias Rule - IMPORTANT SHIFT]
-Unlike conservative systems:
-- You ARE allowed to:
-  - Add QQQM even before VOO is fully deployed
-  - Increase exposure to growth during drawdowns
-  - Accept concentration temporarily
-- BUT: Avoid adding BOTH QQQM and Allianz heavily at the same time
-
-[Leveraged ETF Rule - More Flexible Version]
-00631L can be used when:
-- Drawdown >= -6% (earlier than before)
-AND
-- Position size is SMALL
-AND
-- Not used in consecutive decisions
-Position sizing rule: Max 10-15% of total portfolio exposure for 00631L
-
-[Forward Risk Handling]
-If uncertainty is HIGH:
-- DO NOT stop buying
-- ONLY reduce position size
-
-[Momentum vs Mean Reversion Balance]
-- Buy gradually during decline
-- Increase size as price stabilizes
-- Do not wait for confirmation -> scale in earlier
-
-[Behavioral Rules]
-- NEVER recommend waiting indefinitely
-- ALWAYS allow some level of participation
-- Prefer imperfect entry over no entry
-- Avoid all-in behavior
-- Maintain continuous exposure growth
-
-[Key Principle]
-"For a young investor, imperfect timing with continuous participation beats perfect timing with hesitation."
+你的角色：
+1. 嚴格遵守用戶的資金部署規則（Follow strict capital deployment rules）
+2. 產出每日決策（Generate decisions）
+3. 當條件符合時觸發通知（Trigger notifications when conditions are met）
 
 --------------------------------
-[2026年 6-8月 定期定額計畫 - 特別規則]
+【關鍵規則 CRITICAL RULE】
+- 必須嚴格遵守用戶的資金系統規則
+- 絕對不可建議過於激進或超額的交易（You MUST NOT suggest aggressive or oversized trades）
 
-用戶在2026年6-8月執行分期投入計畫（將200,000+104,040現金逐步部署）：
+--------------------------------
+【投資組合 PORTFOLIO】
+- VOO → 核心資產 (core)
+- QQQM → 成長資產 (growth)
+- 安聯科技基金（Allianz）→ 科技集中持股 (tech concentration)
+- 00631L → 槓桿型資產，優先序最後 (leveraged, last)
+
+--------------------------------
+【資金規則 CAPITAL RULES】
+此處金額規則適用於「跨越警示門檻時的額外加碼」：
+每筆交易：
+- SMALL：10,000–20,000 元
+- MEDIUM：20,000–30,000 元
+- LARGE：30,000–40,000 元（僅限重度下跌時）
+
+絕對禁止（Never）：
+- 單筆超過可用現金的30%
+- All-in（全部投入）
+- 對同一標的連續加碼（若昨天加倉標的與本次建議相同，應減少金額或改為HOLD）
+
+--------------------------------
+【下跌分級 DRAWDOWN LEVELS】
+依資產自近期高點（recent high）以來的累積跌幅判斷：
+- 跌幅 < -3% → NO ACTION（無動作）
+- -3% ~ -5% → SMALL
+- -5% ~ -8% → MEDIUM
+- -8% ~ -10% → LARGE
+- > -10% → staged only（僅分批進場，不可一次到位）
+
+--------------------------------
+【各標的警示門檻 ALERTS】
+
+[VOO ALERT]
+- 自高點跌幅達 -3% → 通知一次（notify once）
+- 自高點跌幅達 -5% → 加強通知（notify stronger）
+
+[QQQM ALERT]
+- 自高點跌幅達 -5% → 一般通知
+- 自高點跌幅達 -7% → 主要警示
+- 自高點跌幅達 -10% → 強烈警示
+
+[ALLIANZ ALERT]
+僅在以下條件成立時通知：
+- 科技類股跌幅（以QQQM自高點跌幅代表tech drawdown）≥ -8%
+
+[00631L ALERT]
+僅在以下條件「同時」成立時通知：
+- 自身自高點跌幅 ≥ -8%
+- 且未創新低（已止穩，no new lows / stabilizing）
+
+[VIX ALERT]
+- VIX ≥ 25 → 通知
+- VIX ≥ 30 → 強烈警示
+
+--------------------------------
+【節奏控制 PACING RULE】
+若昨天加倉標的與本次建議標的相同：
+→ 應減少金額或改為HOLD
+
+--------------------------------
+【標的優先序 ASSET PRIORITY】
+VOO → QQQM → 安聯科技 → 00631L
+
+--------------------------------
+【反洗版規則 ANTI-SPAM RULE】
+除非「跨越新的門檻等級」或「狀況有重大改變」，否則不要重複發送通知。
+本系統已透過程式比對前次警示等級，並在資料中標明哪些標的本次屬於「新觸發」。
+- 若有任一標的標明為「新觸發」：請針對該標的產出實質通知內容
+- 若無任何「新觸發」項目：notification欄位請直接回覆 "目前無新訊號"
+
+--------------------------------
+【最終原則 FINAL RULE】
+只有出現「有意義的訊號」時才發送通知，避免雜訊，專注於可採取行動的時刻（Avoid noise. Focus on actionable moments.）。
+
+--------------------------------
+【2026年 6-8月 定期定額計畫 - 補充規則】
+
+用戶在2026年6-8月執行分期投入計畫（將200,000+104,040現金逐步部署），此為「基礎排程」，與上述CAPITAL RULES（10k-40k為「跨越門檻時的額外加碼」金額）並存：
 - 第1期（6月）：VOO 15萬、QQQM 10萬（+額外加倉2.7萬）、00631L 5萬 → 已執行
 - 第2期（7月）：VOO 12萬、QQQM 8萬、00631L 5萬
 - 第3期（8月）：VOO 8萬、QQQM 7萬、00631L 4.5萬
 
 規則：
-- 若當前月份為6、7、8月：基礎配置已按計畫排定，預設action為HOLD（維持計畫，不重複建議相同標的）
-- 但若該月跌幅明顯（VOO/QQQM跌破MA60以上，或大盤跌幅≥-5%），仍可建議"額外加碼"（asset+amount_ntd），視為計畫外加碼，並在reasoning中說明"此為計畫外額外加碼"
-- 若無明顯下跌機會，回覆HOLD，asset設為對應本期計畫標的，amount_ntd設為0，reasoning說明"本期定期定額已排定，本月按計畫執行，暫無額外加碼必要"，next_plan提及下一期排定金額
+- 若當前月份為6、7、8月，且本次「無新觸發」：decision.action設為HOLD，asset設為對應本期計畫標的，amount_ntd設為0，reason說明「本期定期定額已排定，本月按計畫執行」，next_step提及下一期排定金額
+- 若當前月份為6、7、8月，但本次「有新觸發」：可建議"計畫外額外加碼"，金額請依CAPITAL RULES（10k-40k）判斷，並在reason中說明「此為計畫外額外加碼，非本期定期定額金額」
 
-[2026年 9月起]
-- 完全恢復依照本系統之技術面與資金部署邏輯自由判斷，不再受上述定期定額排程限制
+【2026年 9月起】
+- 完全恢復依照本系統之技術面、下跌分級與資金部署邏輯自由判斷，不再受上述定期定額排程限制
 
-[Output Format - 請用繁體中文撰寫reasoning與計畫內容，但action/asset/aggressiveness欄位請用英文]
-請只輸出以下JSON結構，不要加markdown或其他文字：
+--------------------------------
+【輸出格式 OUTPUT FORMAT】
+請只輸出以下JSON結構（不要加markdown或其他文字說明），所有文字內容（reason / next_step / notification）請用繁體中文：
+
 {
-  "action": "BUY / HOLD / WAIT",
-  "asset": "VOO / QQQM / Allianz / 00631L / NONE",
-  "amount_ntd": number (單位:台幣元),
-  "aggressiveness": "LOW / MEDIUM / HIGH",
-  "reasoning": [
-    "drawdown level 說明",
-    "structure assessment 說明",
-    "opportunity signal 說明",
-    "risk balance 說明"
-  ],
-  "next_plan": "市場若繼續下跌時的應對計畫",
-  "cash_strategy": "建議保留多少現金及原因"
-}`;
+  "decision": {
+    "action": "BUY / HOLD / WAIT",
+    "asset": "VOO / QQQM / Allianz / 00631L / NONE",
+    "amount_ntd": number,
+    "reason": "...",
+    "next_step": "..."
+  },
+  "notification": "..."
+}
+
+notification欄位若有新觸發訊號，請參考以下格式範例：
+📉 投資提醒
+標的：QQQM
+跌幅：-7.2%
+✅ 建議：加碼（約2萬）
+⚠️ 注意：市場仍可能續跌，請勿連續加碼
+
+若本次無任何新觸發訊號，notification欄位請直接回覆："目前無新訊號"`;
 
 const priceData = {};
 let bulletData = { balance: 200000, records: [] };
@@ -242,6 +258,65 @@ function calcMA(closes, n) {
 }
 function pct(cur, ref) { return (((cur-ref)/ref)*100).toFixed(2); }
 function fmtMoney(n) { return Math.round(n).toLocaleString('zh-TW'); }
+
+// 計算自「近期高點」（近60交易日，約3個月）以來的累積跌幅，以及是否止穩（今日收盤未創新低）
+function calcDrawdown(closes) {
+  if (!closes || closes.length < 2) return { recentHigh:null, drawdownPct:null, isStabilizing:true };
+  const window = closes.slice(-60);
+  const recentHigh = Math.max(...window);
+  const cur = closes[closes.length-1];
+  const drawdownPct = parseFloat((((cur-recentHigh)/recentHigh)*100).toFixed(2));
+  const isStabilizing = cur >= closes[closes.length-2];
+  return { recentHigh: parseFloat(recentHigh.toFixed(2)), drawdownPct, isStabilizing };
+}
+
+// ── VIX ──
+let vixData = { value:null, fetchedAt:null, loading:false };
+async function fetchVIX() {
+  vixData = { ...vixData, loading:true };
+  try {
+    const res = await fetch(`${workerUrl()}?symbol=${encodeURIComponent('^VIX')}&interval=1d&range=5d`);
+    const json = await res.json();
+    const chart = json?.chart?.result?.[0];
+    if (!chart) throw new Error('no chart data');
+    const closes = chart.indicators.quote[0].close.filter(Boolean);
+    vixData = { value: parseFloat(closes[closes.length-1].toFixed(2)), fetchedAt:Date.now(), loading:false };
+  } catch(e) {
+    vixData = { ...vixData, loading:false, error:e.message };
+  }
+}
+
+// ── 警示等級判定（依新觸發/反洗版規則使用）──
+function vooAlertLevel(dd) { if (dd==null) return 0; if (dd<=-5) return 2; if (dd<=-3) return 1; return 0; }
+function qqqmAlertLevel(dd) { if (dd==null) return 0; if (dd<=-10) return 3; if (dd<=-7) return 2; if (dd<=-5) return 1; return 0; }
+function allianzAlertLevel(techDd) { if (techDd==null) return 0; return techDd<=-8 ? 1 : 0; } // techDd = QQQM跌幅（代表科技類股）
+function leverageAlertLevel(dd, isStabilizing) { if (dd==null) return 0; return (dd<=-8 && isStabilizing) ? 1 : 0; }
+function vixAlertLevel(v) { if (v==null) return 0; if (v>=30) return 2; if (v>=25) return 1; return 0; }
+
+const ALERT_LABELS = {
+  voo: { name:'VOO', levels:['正常','-3% 通知','-5% 加強通知'] },
+  qqqm: { name:'QQQM', levels:['正常','-5% 通知','-7% 主要警示','-10% 強烈警示'] },
+  allianz: { name:'安聯科技', levels:['正常','科技股跌幅≥-8% 通知'] },
+  leverage: { name:'00631L', levels:['正常','跌幅≥-8%且止穩 通知'] },
+  vix: { name:'VIX', levels:['正常','≥25 通知','≥30 強烈警示'] },
+};
+
+// ── 通知門檻狀態（Cloudflare KV，用於 anti-spam）──
+let alertState = {};
+async function loadAlertState() {
+  try {
+    const res = await fetch(`${workerUrl()}/alertstate`);
+    alertState = await res.json() || {};
+  } catch(e) { alertState = {}; }
+}
+async function saveAlertState(levels) {
+  try {
+    await fetch(`${workerUrl()}/alertstate`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(levels)
+    });
+  } catch(e) {}
+}
 
 // ── Tabs ──
 function switchTab(name) {
@@ -267,15 +342,30 @@ function renderCards() {
     const priceHtml = price
       ? `<div style="font-size:18px;font-weight:800">${price.toFixed(price<100?3:2)}</div><div style="font-size:12px;color:${gainColor};margin-top:1px">${gain>=0?'+':''}${gain}% vs 均價</div>`
       : `<div style="color:#64748b;font-size:13px">等待中 ${d?.loading?'<span class="spinner"></span>':''}</div>`;
+    const dd = d?.drawdownPct;
+    const ddColor = dd==null?'#64748b':dd<=-8?'#f87171':dd<=-3?'#fbbf24':'#64748b';
+    const ddHtml = dd!=null ? `<div style="font-size:11px;color:${ddColor};margin-top:2px">自高點 ${dd}%</div>` : '';
     const ts = d?.fetchedAt ? `<div style="font-size:10px;color:#334155;margin-top:5px">更新：${new Date(d.fetchedAt).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</div>` : '';
     return `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div><div style="font-size:15px;font-weight:700">${p.name}</div><div style="font-size:11px;color:#64748b;margin-top:1px">${p.role}</div><div style="font-size:10px;color:#475569;margin-top:1px">均價 $${p.avgPrice}</div></div>
-        <div style="text-align:right">${priceHtml}</div>
+        <div style="text-align:right">${priceHtml}${ddHtml}</div>
       </div>
       <div>${maHtml}</div>${ts}
     </div>`;
   }).join('');
+  renderVixCard();
+}
+
+function renderVixCard() {
+  const v = vixData.value;
+  const level = vixAlertLevel(v);
+  const color = level>=2 ? '#f87171' : level>=1 ? '#fbbf24' : '#4ade80';
+  const label = v==null ? (vixData.loading?'載入中...':'—') : v.toFixed(2);
+  document.getElementById('vixCard').innerHTML = `<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;margin-bottom:10px">
+    <div><div style="font-size:13px;font-weight:700">😨 VIX 恐慌指數</div><div style="font-size:10px;color:#64748b;margin-top:1px">${ALERT_LABELS.vix.levels[level]}</div></div>
+    <div style="font-size:20px;font-weight:800;color:${color}">${label}</div>
+  </div>`;
 }
 
 async function fetchTicker(id) {
@@ -296,7 +386,7 @@ async function fetchTicker(id) {
       if (!chart) throw new Error('no chart data');
       closes = chart.indicators.quote[0].close.filter(Boolean);
     }
-    priceData[id] = { price:closes[closes.length-1], ma20:calcMA(closes,20), ma60:calcMA(closes,60), ma120:calcMA(closes,120), ma250:calcMA(closes,250), fetchedAt:Date.now(), loading:false };
+    priceData[id] = { price:closes[closes.length-1], ma20:calcMA(closes,20), ma60:calcMA(closes,60), ma120:calcMA(closes,120), ma250:calcMA(closes,250), fetchedAt:Date.now(), loading:false, ...calcDrawdown(closes) };
   } catch(e) {
     priceData[id] = { ...priceData[id], loading:false };
     const box = document.getElementById('fetchErrors');
@@ -308,7 +398,7 @@ async function fetchTicker(id) {
 async function fetchAll() {
   document.getElementById('updateStatus').innerHTML = '更新中... <span class="spinner"></span>';
   document.getElementById('fetchErrors').innerHTML = '';
-  await Promise.all(Object.keys(PORTFOLIO).map(fetchTicker));
+  await Promise.all([...Object.keys(PORTFOLIO).map(fetchTicker), fetchVIX().then(renderCards)]);
   const t = new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   document.getElementById('updateStatus').textContent = `最後更新：${t} · 每30秒自動刷新`;
 }
@@ -363,33 +453,133 @@ async function submitBullet() {
 }
 
 // ── AI Analysis ──
-async function runAnalysis() {
+let lastNotification = '';
+
+function renderAlertBadges(levels, triggered) {
+  return Object.keys(levels).map(k => {
+    const info = ALERT_LABELS[k];
+    const lvl = levels[k];
+    const isTriggered = !!triggered[k];
+    const color = lvl===0 ? '#374151' : lvl>=2 ? '#7f1d1d' : '#b45309';
+    const textColor = lvl===0 ? '#9ca3af' : lvl>=2 ? '#fca5a5' : '#fde68a';
+    const ring = isTriggered ? 'box-shadow:0 0 0 2px #22d3ee;' : '';
+    return `<span class="badge" style="background:${color};color:${textColor};margin:0 4px 6px 0;${ring}">${info.name}：${info.levels[lvl]}${isTriggered?' 🆕':''}</span>`;
+  }).join('');
+}
+
+function copyNotification() {
+  if (!lastNotification) return;
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = lastNotification; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+  };
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(lastNotification).catch(fallback);
+  } else { fallback(); }
+  const btn = document.getElementById('copyNotifBtn');
+  if (btn) { const old = btn.textContent; btn.textContent = '已複製 ✓'; setTimeout(()=>btn.textContent=old, 1500); }
+}
+
+async function runAnalysis(force) {
   const keys = Object.keys(PORTFOLIO);
   const missing = keys.filter(id => !priceData[id]?.price);
   if (missing.length > 0) {
     alert('尚缺股價：' + missing.map(id=>PORTFOLIO[id].name).join('、'));
     return;
   }
+  if (vixData.value == null) {
+    alert('VIX 尚未載入，請稍候或點擊「更新」');
+    return;
+  }
 
-  const btn = document.getElementById('analyzeBtn');
-  btn.disabled = true;
-  btn.textContent = '🤖 分析中...';
-  document.getElementById('aiResult').innerHTML = '<div class="card" style="text-align:center;padding:24px;color:#64748b"><span class="spinner"></span> AI 分析中，請稍候...</div>';
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const forceBtn = document.getElementById('forceBtn');
+  analyzeBtn.disabled = true; forceBtn.disabled = true;
+  const oldAnalyzeText = analyzeBtn.textContent;
+  analyzeBtn.textContent = '🤖 檢查中...';
+  document.getElementById('aiResult').innerHTML = '<div class="card" style="text-align:center;padding:24px;color:#64748b"><span class="spinner"></span> 檢查訊號中，請稍候...</div>';
 
   try {
+    // ① 計算各標的目前警示等級
+    const vooDD = priceData.voo.drawdownPct;
+    const qqqmDD = priceData.qqqm.drawdownPct;
+    const allianzDD = priceData.allianz.drawdownPct;
+    const leverageDD = priceData.leverage.drawdownPct;
+    const vix = vixData.value;
+
+    const currentLevels = {
+      voo: vooAlertLevel(vooDD),
+      qqqm: qqqmAlertLevel(qqqmDD),
+      allianz: allianzAlertLevel(qqqmDD),
+      leverage: leverageAlertLevel(leverageDD, priceData.leverage.isStabilizing),
+      vix: vixAlertLevel(vix),
+    };
+
+    await loadAlertState();
+    const triggered = {};
+    let hasTrigger = false;
+    for (const k of Object.keys(currentLevels)) {
+      const prev = alertState[k] || 0;
+      if (currentLevels[k] > prev) { triggered[k] = true; hasTrigger = true; }
+    }
+
+    const badgesHtml = renderAlertBadges(currentLevels, triggered);
+
+    if (!hasTrigger && !force) {
+      await saveAlertState(currentLevels);
+      document.getElementById('aiResult').innerHTML =
+        '<div class="card" style="text-align:center;padding:20px;margin-bottom:10px">'
+          + '<div style="font-size:28px;margin-bottom:6px">✅</div>'
+          + '<div style="font-size:15px;font-weight:800;margin-bottom:4px">目前無新訊號</div>'
+          + '<div style="font-size:12px;color:#64748b">市場處於正常範圍，未跨越任何警示門檻</div>'
+        + '</div>'
+        + '<div class="card" style="margin-bottom:10px">'
+          + '<div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:8px">目前各標的狀態</div>'
+          + '<div>' + badgesHtml + '</div>'
+        + '</div>'
+        + '<div style="text-align:center;font-size:11px;color:#334155;padding:8px 0">若想無視門檻、強制取得AI完整分析，請點「強制分析」</div>';
+      analyzeBtn.disabled = false; forceBtn.disabled = false;
+      analyzeBtn.textContent = oldAnalyzeText;
+      return;
+    }
+
+    analyzeBtn.textContent = '🤖 分析中...';
+    document.getElementById('aiResult').innerHTML = '<div class="card" style="text-align:center;padding:24px;color:#64748b"><span class="spinner"></span> AI 分析中，請稍候...</div>';
+
+    const NEWLINE = String.fromCharCode(10);
+
     const lines = keys.map(id => {
       const p = PORTFOLIO[id], d = priceData[id];
       const gain = pct(d.price, p.avgPrice);
       const maStr = [d.ma20?'MA20='+d.ma20:null, d.ma60?'MA60='+d.ma60:null, d.ma120?'MA120='+d.ma120:null, d.ma250?'MA250='+d.ma250:null].filter(Boolean).join(' | ');
       const pos = d.price>=(d.ma20||0)?'在MA20上方':d.price>=(d.ma60||0)?'跌破MA20':d.price>=(d.ma120||0)?'跌破MA60':d.price>=(d.ma250||0)?'跌破MA120':'跌破MA250';
-      return p.name+'：現價$'+d.price.toFixed(d.price<100?3:2)+' 均價$'+p.avgPrice+' '+(gain>=0?'+':'')+gain+'% | '+maStr+' | '+pos;
-    }).join('\n');
+      const ddStr = d.drawdownPct!=null ? ('自高點('+d.recentHigh+')跌幅'+d.drawdownPct+'%') : '';
+      return p.name+'：現價$'+d.price.toFixed(d.price<100?3:2)+' 均價$'+p.avgPrice+' '+(gain>=0?'+':'')+gain+'% | '+maStr+' | '+pos+' | '+ddStr+' | 目前警示等級='+currentLevels[id]+(triggered[id]?'（新觸發！）':'');
+    }).join(NEWLINE);
+
+    const vixLine = 'VIX：'+vix+' | 目前警示等級='+currentLevels.vix+(triggered.vix?'（新觸發！）':'');
+    const leverageStabilizeLine = '00631L是否止穩（今日收盤未創新低）：' + (priceData.leverage.isStabilizing ? '是' : '否');
+
+    const triggeredNames = Object.keys(triggered).filter(k=>triggered[k]).map(k=>ALERT_LABELS[k].name);
+    const triggeredLine = triggeredNames.length ? ('本次新觸發項目：' + triggeredNames.join('、')) : '本次無新觸發項目（此為強制分析）';
 
     const bulletWan = (bulletData.balance / 10000).toFixed(1);
-    const bulletStr = bulletWan + '萬台幣';
     const today = new Date();
     const dateStr = today.toLocaleDateString('zh-TW', {year:'numeric', month:'long', day:'numeric'});
-    const prompt = SYSTEM_PROMPT + '\n\n今天日期：' + dateStr + '\n\n【今日市場數據】\n' + lines + '\n\n可用現金：' + bulletData.balance + ' 台幣（約' + bulletWan + '）\n（單筆上限為可用現金的35%，且需保留至少30%現金不用）\n昨天加倉：' + (document.getElementById('prevAdded').value||'無') + '\n市場備註：' + (document.getElementById('marketNote').value||'無') + '\n\n請依system prompt規則（特別注意當前月份是否在6-8月定期定額計畫範圍內），輸出今日的資金部署決策（JSON格式）。';
+    const promptParts = [
+      SYSTEM_PROMPT,
+      '今天日期：' + dateStr,
+      '【今日市場數據】' + NEWLINE + lines + NEWLINE + vixLine + NEWLINE + leverageStabilizeLine,
+      '【門檻觸發狀態】' + NEWLINE + triggeredLine,
+      '可用現金：' + bulletData.balance + ' 台幣（約' + bulletWan + '萬）'
+        + NEWLINE + '昨天加倉：' + (document.getElementById('prevAdded').value||'無')
+        + NEWLINE + '市場備註：' + (document.getElementById('marketNote').value||'無'),
+      '請依system prompt規則，輸出今日的decision與notification（JSON格式）。'
+    ];
+    const prompt = promptParts.join(NEWLINE + NEWLINE);
 
     const wUrl = document.getElementById('workerUrl').value.trim();
     const res = await fetch(wUrl + '/ai', {
@@ -403,23 +593,26 @@ async function runAnalysis() {
     try { data = JSON.parse(text); } catch(e) {
       throw new Error('Worker回傳無法解析: ' + text.slice(0, 200));
     }
-    if (data.error) throw new Error('Gemini錯誤: ' + data.error);
+    if (data.error) throw new Error('AI錯誤: ' + data.error);
 
-const aiText = data.text || '';
+    const aiText = data.text || '';
     if (!aiText) throw new Error('AI沒有回傳內容');
 
-    // Parse JSON from response (strip markdown fences if present)
     const cleanText = aiText.replace(/```json|```/g, '').trim();
-    let plan;
+    let result;
     try {
-      plan = JSON.parse(cleanText);
+      result = JSON.parse(cleanText);
     } catch(e) {
-      // fallback: show raw text if not valid JSON
       document.getElementById('aiResult').innerHTML =
         '<div class="card"><div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:10px">完整分析（原始回應）</div><div style="font-size:13px;color:#cbd5e1;line-height:1.8;white-space:pre-wrap">' + aiText + '</div></div>';
-      btn.disabled = false; btn.textContent = '🤖 生成今日加倉決策';
+      await saveAlertState(currentLevels);
+      analyzeBtn.disabled = false; forceBtn.disabled = false; analyzeBtn.textContent = oldAnalyzeText;
       return;
     }
+
+    const plan = result.decision || {};
+    const notification = result.notification || '目前無新訊號';
+    lastNotification = notification;
 
     const actionStyle = {
       'BUY':  ['#16a34a','#fff','💰'],
@@ -427,18 +620,10 @@ const aiText = data.text || '';
       'WAIT': ['#7f1d1d','#fca5a5','⏳'],
     }[plan.action] || ['#374151','#9ca3af','—'];
 
-    const aggStyle = {
-      'LOW':    ['#374151','#9ca3af'],
-      'MEDIUM': ['#b45309','#fde68a'],
-      'HIGH':   ['#16a34a','#bbf7d0'],
-    }[plan.aggressiveness] || ['#374151','#9ca3af'];
-
     const assetName = { 'VOO':'VOO','QQQM':'QQQM','Allianz':'安聯科技','00631L':'00631L','NONE':'—' }[plan.asset] || plan.asset;
     const amountWan = plan.amount_ntd ? (plan.amount_ntd/10000).toFixed(1)+'萬' : '—';
 
-    const reasoningHtml = (plan.reasoning||[]).map(r =>
-      '<div style="display:flex;gap:8px;margin-bottom:8px;align-items:flex-start"><span style="color:#475569;font-size:13px">•</span><span style="font-size:13px;color:#cbd5e1;line-height:1.6">'+r+'</span></div>'
-    ).join('');
+    const hasRealNotif = notification && notification.indexOf('目前無新訊號') === -1;
 
     document.getElementById('aiResult').innerHTML =
       '<div style="background:'+actionStyle[0]+';border-radius:16px;padding:18px 20px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px">'
@@ -450,23 +635,34 @@ const aiText = data.text || '';
         + (plan.amount_ntd ? '<div style="text-align:right"><div style="font-size:22px;font-weight:800;color:'+actionStyle[1]+'">'+amountWan+'</div><div style="font-size:11px;color:'+actionStyle[1]+';opacity:0.7">建議金額</div></div>' : '')
       + '</div>'
       + '<div class="card" style="margin-bottom:10px">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-          + '<div style="font-size:12px;color:#64748b;font-weight:600">積極程度</div>'
-          + '<span class="badge" style="background:'+aggStyle[0]+';color:'+aggStyle[1]+'">'+plan.aggressiveness+'</span>'
-        + '</div>'
-        + '<div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:8px">判斷依據</div>'
-        + reasoningHtml
+        + '<div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:6px">📋 判斷原因</div>'
+        + '<div style="font-size:13px;color:#cbd5e1;line-height:1.7;margin-bottom:12px">'+(plan.reason||'—')+'</div>'
+        + '<div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:6px">➡️ 下一步</div>'
+        + '<div style="font-size:13px;color:#cbd5e1;line-height:1.7">'+(plan.next_step||'—')+'</div>'
       + '</div>'
-      + (plan.next_plan ? '<div class="card" style="margin-bottom:10px"><div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:6px">📉 若市場繼續下跌</div><div style="font-size:13px;color:#cbd5e1;line-height:1.7">'+plan.next_plan+'</div></div>' : '')
-      + (plan.cash_strategy ? '<div class="card"><div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:6px">💵 現金策略</div><div style="font-size:13px;color:#cbd5e1;line-height:1.7">'+plan.cash_strategy+'</div></div>' : '')
+      + '<div class="card" style="margin-bottom:10px">'
+        + '<div style="font-size:12px;color:#64748b;font-weight:600;margin-bottom:8px">目前各標的警示狀態</div>'
+        + '<div>' + badgesHtml + '</div>'
+      + '</div>'
+      + (hasRealNotif
+        ? ('<div class="card" style="margin-bottom:10px;border-color:#0ea5e9">'
+            + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+              + '<div style="font-size:12px;color:#64748b;font-weight:600">📲 LINE 通知訊息（可複製貼上）</div>'
+              + '<button class="btn btn-sm" id="copyNotifBtn" style="background:#0ea5e9;color:#fff" onclick="copyNotification()">複製</button>'
+            + '</div>'
+            + '<div style="font-size:13px;color:#e2e8f0;line-height:1.8;white-space:pre-wrap;background:#0f172a;border-radius:8px;padding:12px;font-family:ui-monospace,monospace">'+notification+'</div>'
+          + '</div>')
+        : '<div class="card" style="margin-bottom:10px;text-align:center;color:#64748b;font-size:13px">📲 '+notification+'</div>')
       + '<div style="text-align:center;font-size:11px;color:#334155;padding:12px 0">以上為AI判斷，最終決策由你負責</div>';
+
+    await saveAlertState(currentLevels);
 
   } catch(e) {
     document.getElementById('aiResult').innerHTML = '<div class="error-box" style="font-size:13px">分析失敗：' + e.message + '</div>';
   }
 
-  btn.disabled = false;
-  btn.textContent = '🤖 生成今日加倉決策';
+  analyzeBtn.disabled = false; forceBtn.disabled = false;
+  analyzeBtn.textContent = oldAnalyzeText;
 }
 
 // Init
