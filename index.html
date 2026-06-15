@@ -275,7 +275,7 @@ let vixData = { value:null, fetchedAt:null, loading:false };
 async function fetchVIX() {
   vixData = { ...vixData, loading:true };
   try {
-    const res = await fetch(`${workerUrl()}?symbol=${encodeURIComponent('^VIX')}&interval=1d&range=5d`);
+    const res = await fetch(`${workerUrl()}?symbol=${encodeURIComponent('^VIX')}&interval=1d&range=5d`, { cache: 'no-store' });
     const json = await res.json();
     const chart = json?.chart?.result?.[0];
     if (!chart) throw new Error('no chart data');
@@ -375,12 +375,12 @@ async function fetchTicker(id) {
   try {
     let closes = [];
     if (id === 'allianz') {
-      const res = await fetch(`${workerUrl()}?allianz=1`);
+      const res = await fetch(`${workerUrl()}?allianz=1`, { cache: 'no-store' });
       const json = await res.json();
       if (json.error) throw new Error(json.error);
       closes = (json.items||[]).map(it=>Array.isArray(it)?it[1]:it.nav).filter(v=>v&&!isNaN(v));
     } else {
-      const res = await fetch(`${workerUrl()}?symbol=${encodeURIComponent(p.ticker)}&interval=1d&range=1y`);
+      const res = await fetch(`${workerUrl()}?symbol=${encodeURIComponent(p.ticker)}&interval=1d&range=1y`, { cache: 'no-store' });
       const json = await res.json();
       const chart = json?.chart?.result?.[0];
       if (!chart) throw new Error('no chart data');
